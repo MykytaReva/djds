@@ -1,3 +1,73 @@
-from django.shortcuts import render
+from django.http import JsonResponse, HttpResponse
+from django.shortcuts import render, get_object_or_404
+from profiles.models import Profile
 
-# Create your views here.
+from django.template.loader import get_template
+from xhtml2pdf import pisa
+from django.contrib.staticfiles import finders
+from django.conf import settings
+
+from .utils import get_report_image
+from .models import Report
+from .forms import ReportForm
+from django.views import generic
+
+
+class ReportListView(generic.ListView):
+    model = Report
+    template_name = 'reports/main.html'
+
+
+class ReportDetailView(generic.DetailView):
+    model = Report
+    template_name = 'reports/detail.html'
+
+
+class UploadTemplateView(generic.TemplateView):
+    template_name = 'reports/from_file.html'
+
+def csv_upload_view(request):
+    return HttpResponse()
+
+
+def create_report_view(request):
+    form = ReportForm(request.POST or None)
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        # name = request.POST.get('name')
+        # remarks = request.POST.get('remarks')
+        image = request.POST.get('image')
+        img = get_report_image(image)
+        author = Profile.objects.get(user=request.user)
+        # Report.objects.create(name=name, remarks=remarks, image=img, author=author)
+        if form.is_valid():
+            instance = form.save(commit=False)
+            instance.image = img
+            instance.author = author
+            instance.save()
+        return JsonResponse({'msg': 'send'})
+
+    return JsonResponse({})
+
+def render_pdf_view(request, pk):
+    template_path = 'reports/pdf.html'
+    obj = get_object_or_404(Report, id=pk)
+    context = {'obj': obj}
+
+    response = HttpResponse(content_type='application/pdf')
+
+    # response['Content-Disposition'] = 'attachment; filename="report.pdf"'
+    response['Content-Disposition'] = 'filename="report.pdf"'
+
+    template = get_template(template_path)
+    html = template.render(context)
+
+    pisa_status = pisa.CreatePDF(
+       html, dest=response)
+
+def csv_upload_view(request):
+    print('PROFILE IS SENT')
+    return HttpResponse()
+
+    if pisa_status.err:
+       return HttpResponse('We had some errors <pre>' + html + '</pre>')
+    return response
