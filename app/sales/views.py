@@ -6,9 +6,11 @@ from reports.forms import ReportForm
 import pandas as pd
 from .utils import get_customer_from_id,\
     get_salesman_from_id, get_chart
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 
 
-
+@login_required
 def home_view(request):
     search_form = SalesSearchForm(request.POST or None)
     report_form = ReportForm()
@@ -25,13 +27,24 @@ def home_view(request):
         chart_type = request.POST.get('chart_type')
         results_by = request.POST.get('results_by')
 
-        sale_qs = Sales.objects.filter(created__date__lte=date_to, created__date__gte=date_from)
+        sale_qs = Sales.objects.filter(
+            created__date__lte=date_to,
+            created__date__gte=date_from
+        )
         if len(sale_qs):
             sales_df = pd.DataFrame(sale_qs.values())
-            sales_df['customer_id'] = sales_df['customer_id'].apply(get_customer_from_id)
-            sales_df['salesman_id'] = sales_df['salesman_id'].apply(get_salesman_from_id)
-            sales_df['created'] = sales_df['created'].apply(lambda x: x.strftime('%d.%m.%Y'))
-            sales_df['updated'] = sales_df['updated'].apply(lambda x: x.strftime('%d.%m.%Y'))
+            sales_df['customer_id'] = sales_df['customer_id'].apply(
+                get_customer_from_id
+            )
+            sales_df['salesman_id'] = sales_df['salesman_id'].apply(
+                get_salesman_from_id
+            )
+            sales_df['created'] = sales_df['created'].apply(
+                lambda x: x.strftime('%d.%m.%Y')
+            )
+            sales_df['updated'] = sales_df['updated'].apply(
+                lambda x: x.strftime('%d.%m.%Y')
+            )
             sales_df.rename({
                 'id': 'sales-id',
                 'customer_id': 'customer',
@@ -52,7 +65,6 @@ def home_view(request):
                     }
                     position_data.append(obj)
 
-
             position_df = pd.DataFrame(position_data)
             position_df.rename({
                 'position_id': 'position',
@@ -61,7 +73,10 @@ def home_view(request):
 
             merged_df = pd.merge(sales_df, position_df, on='sales-id')
 
-            df = merged_df.groupby('transaction_id', as_index=False)['price'].agg('sum')
+            df = merged_df.groupby(
+                'transaction_id',
+                as_index=False
+            )['price'].agg('sum')
 
             chart = get_chart(chart_type, sales_df, results_by)
             sales_df = sales_df.to_html()
@@ -70,7 +85,6 @@ def home_view(request):
             df = df.to_html()
         else:
             no_data = 'No data is available in this date range.'
-
 
     context = {
         'search_form': search_form,
@@ -84,17 +98,19 @@ def home_view(request):
     }
     return render(request, 'sales/home.html', context)
 
-class SaleListView(generic.ListView):
+
+class SaleListView(LoginRequiredMixin, generic.ListView):
     model = Sales
     template_name = 'sales/main.html'
     context_object_name = 'qs'
-    #otherwise 'object_list'
+
 
 # def sale_list_view(request):
 #     qs = Sales.objects.all()
 #     return render(request, 'sales/main.html', {'qs': qs})
 
-class SaleDetailView(generic.DetailView):
+
+class SaleDetailView(LoginRequiredMixin, generic.DetailView):
     model = Sales
     template_name = 'sales/detail.html'
 
@@ -102,4 +118,3 @@ class SaleDetailView(generic.DetailView):
 #     pk = kwargs.get('pk')
 #     obj = Sales.objects.get(pk=pk)
 #     return render(request, 'sales/detail.html', {'object': obj})
-

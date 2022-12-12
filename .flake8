@@ -1,0 +1,12 @@
+[flake8]
+exclude =
+    migrations
+    __pycache__
+    manage.py
+    settings.py
+    env
+    .env
+    F401
+
+per-file-ignores =
+    */apps.py: F401

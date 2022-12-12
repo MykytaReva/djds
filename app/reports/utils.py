@@ -1,4 +1,5 @@
-import base64, uuid
+import base64
+import uuid
 from django.core.files.base import ContentFile
 
 
