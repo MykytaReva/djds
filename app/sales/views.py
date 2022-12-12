@@ -94,3 +94,5 @@ class SaleDetailView(generic.DetailView):
 #     obj = Sales.objects.get(pk=pk)
 #     return render(request, 'sales/detail.html', {'object': obj})
 
+def something_new_from_branch_main(request):
+    return 'also will be an flake8 error'
