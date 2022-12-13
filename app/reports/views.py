@@ -1,3 +1,121 @@
-from django.shortcuts import render
+from django.http import JsonResponse, HttpResponse
+from django.shortcuts import get_object_or_404
+from profiles.models import Profile
+from django.template.loader import get_template
+from xhtml2pdf import pisa
+from .utils import get_report_image
+from .models import Report
+from .forms import ReportForm
+from django.views import generic
+from products.models import Product
+from sales.models import Sales, Position, CSV
+import csv
+from django.utils.dateparse import parse_date
+from customers.models import Customer
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 
-# Create your views here.
+
+class ReportListView(LoginRequiredMixin, generic.ListView):
+    model = Report
+    template_name = 'reports/main.html'
+
+
+class ReportDetailView(LoginRequiredMixin, generic.DetailView):
+    model = Report
+    template_name = 'reports/detail.html'
+
+
+class UploadTemplateView(LoginRequiredMixin, generic.TemplateView):
+    template_name = 'reports/from_file.html'
+
+
+@login_required
+def create_report_view(request):
+    form = ReportForm(request.POST or None)
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        # name = request.POST.get('name')
+        # remarks = request.POST.get('remarks')
+        image = request.POST.get('image')
+        img = get_report_image(image)
+        author = Profile.objects.get(user=request.user)
+# Report.objects.create(name=name, remarks=remarks, image=img, author=author)
+        if form.is_valid():
+            instance = form.save(commit=False)
+            instance.image = img
+            instance.author = author
+            instance.save()
+        return JsonResponse({'msg': 'send'})
+
+    return JsonResponse({})
+
+
+@login_required
+def render_pdf_view(request, pk):
+    template_path = 'reports/pdf.html'
+    obj = get_object_or_404(Report, id=pk)
+    context = {'obj': obj}
+
+    response = HttpResponse(content_type='application/pdf')
+
+    # response['Content-Disposition'] = 'attachment; filename="report.pdf"'
+    response['Content-Disposition'] = 'filename="report.pdf"'
+
+    template = get_template(template_path)
+    html = template.render(context)
+
+    pisa_status = pisa.CreatePDF(
+       html, dest=response)
+
+    if pisa_status.err:
+        return HttpResponse('We had some errors <pre>' + html + '</pre>')
+
+    return response
+
+
+@login_required
+def csv_upload_view(request):
+    if request.method == 'POST':
+        csv_file_name = request.FILES.get('file').name
+        csv_file = request.FILES.get('file')
+        obj, created = CSV.objects.get_or_create(file_name=csv_file_name)
+
+        if created:
+            obj.csv_file = csv_file
+            obj.save()
+            with open(obj.csv_file.path, 'r') as f:
+                reader = csv.reader(f)
+                reader.__next__()
+                for row in reader:
+                    transaction_id = row[1]
+                    product = row[2]
+                    quantity = int(row[3])
+                    customer = row[4]
+                    date = parse_date(row[5])
+                    try:
+                        product_obj = Product.objects.get(name__iexact=product)
+                    except Product.DoesNotExist:
+                        product_obj = None
+                    if product_obj:
+                        customer_obj, _ = Customer.objects.get_or_create(
+                            name=customer
+                        )
+                        salesman_obj = Profile.objects.get(user=request.user)
+                        position_obj = Position.objects.create(
+                            product=product_obj,
+                            quantity=quantity,
+                            created=date,
+                        )
+
+                        sale_obj, _ = Sales.objects.get_or_create(
+                            transaction_id=transaction_id,
+                            customer=customer_obj,
+                            salesman=salesman_obj,
+                            created=date,
+                        )
+                        sale_obj.positions.add(position_obj)
+                        sale_obj.save()
+                        return JsonResponse({'ex': False})
+        else:
+            return JsonResponse({'ex': True})
+    return HttpResponse()

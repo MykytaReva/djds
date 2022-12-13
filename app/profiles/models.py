@@ -2,6 +2,7 @@ from django.contrib.auth.models import User
 from django.core.validators import FileExtensionValidator
 from django.db import models
 
+
 def avatars(instance, filename):
     return 'avatar/{0}/{1}'.format(instance.user.id, filename)
 
