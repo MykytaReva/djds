@@ -1,3 +1,8 @@
-from django.shortcuts import render
+from django.views import generic
+from sales.models import Sales
 
-# Create your views here.
+
+class GitLearning(generic.list):
+    model = Sales
+    template_name = 'sales/main.html'
+    context_object_name = 'qs'
